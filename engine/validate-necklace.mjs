@@ -3,8 +3,10 @@
 //
 // ⚠ 모델 메모: 이 데이터엔 합산 공격력(고정×(1+공격력%))이 없고 "최종 공격력"만 있다.
 //   최종 공격력 = 합산 × 스킬 공격력%  → 스킬 레벨의 공격력 기여가 이미 반영됨.
-//   따라서 최종 공격력을 attack 입력으로 직접 사용하고, perLevel 항은 쓰지 않는다.
+//   atkFinal을 스냅샷 비교 모드로 입력 → perLevel 항 자동 OFF (이중계산 방지).
 //   (스킬 레벨이 "공격력 외" 스킬 계수에도 영향을 주는지는 이 데이터로 분리 불가 — 2차 효과)
+
+import { realDamage } from "./realDamage.mjs";
 
 const VERSIONS = {
   A: { lv: 74, power: 222904 /*만*/, atkFinal: 5711714, dmg: 225.7, amp: 1.4, statRatio: 102,
@@ -18,23 +20,7 @@ const VERSIONS = {
        finalDmg: 12.3, minMult: 128.6, maxMult: 141.1, skillLevel: 23 },
 };
 
-// 최종 공격력 기반 실데미지 (perLevel 미사용)
-function realDamage(s, mode) {
-  const crit     = 1 + (s.critRate / 100) * (s.critDmg / 100);
-  const target   = mode.boss  ? (1 + s.bossDmg  / 100) : (1 + s.normalDmg / 100);
-  const atype    = mode.skill ? (1 + s.skillDmg / 100) : (1 + s.basicDmg  / 100);
-  const dmgRange = ((s.minMult + s.maxMult) / 2) / 100;
-  return s.atkFinal
-    * (1 + s.dmg       / 100)
-    * (1 + s.amp       / 100)
-    * (1 + s.statRatio / 100)
-    * crit
-    * target
-    * atype
-    * (1 + s.finalDmg  / 100)
-    * dmgRange;
-}
-
+// atkFinal이 있으므로 스냅샷 비교 모드 자동 적용 (perLevel 항 OFF)
 function report(mode, label) {
   console.log(`\n── ${label} ─────────────────────────────`);
   const rows = Object.entries(VERSIONS).map(([k, s]) => ({ k, rd: realDamage(s, mode), power: s.power }));
