@@ -149,6 +149,50 @@ export function compareDamage(base, delta, mode, options = {}) {
   return realDamage(after, mode, options) / realDamage(base, mode, options) - 1;
 }
 
+// ── 사냥속도 모델 ─────────────────────────────────────────────
+// env 파라미터 (측정값 — 아직 미수집, 함수 파라미터로 수신):
+//   monsterHP  : 몬스터 최대 HP
+//   hitsPerSec : 초당 타격수 (공격속도에서 파생)
+//   aoeTargets : 스킬 1회당 동시 타격 마릿수 (기본 1)
+
+// clearTime: 몬스터 1마리 처치 시간(초).
+//   원킬(1타에 HP 이상): 처치시간 = 1 / hitsPerSec (초과 데미지는 버려짐).
+//   비원킬: ceil(HP / 1타 데미지) 타격이 필요.
+export function clearTime(s, mode, { monsterHP, hitsPerSec, aoeTargets = 1 }) {
+  const perHit = realDamage(s, mode); // mode.stageG 제공 시 방어 감쇄 자동 반영
+  const hitsToKill = perHit >= monsterHP ? 1 : Math.ceil(monsterHP / perHit);
+  return hitsToKill / hitsPerSec;
+}
+
+// huntRate: 시간당 처치 마릿수(상대 비교용).
+//   AoE면 clearTime 동안 aoeTargets마리를 동시 처치 → 시간당 처치 = aoeTargets / clearTime.
+export function huntRate(s, mode, env) {
+  return env.aoeTargets / clearTime(s, mode, env);
+}
+
+// compareHuntSpeed: 옵션 변경 시 사냥속도 변화율 (예: +0.5 = +50%).
+//   원킬 구간에서는 공속·AoE만 효과 있음 (데미지 증가가 사냥속도에 기여 0).
+export function compareHuntSpeed(base, delta, mode, env) {
+  const after = applyDelta(base, delta);
+  return huntRate(after, mode, env) / huntRate(base, mode, env) - 1;
+}
+
+// overkillThresholdG: 원킬 가능한 최대 글로벌스텝(g)을 반환.
+//   hpByG: { g: monsterHP } 객체 — 각 스테이지의 몬스터 HP.
+//   각 g에서 realDamage(s, { ...mode, stageG: g }) >= hp 이면 원킬.
+//   원킬 가능한 g 중 최대값을 반환. 단 하나도 원킬 불가면 null 반환.
+export function overkillThresholdG(s, mode, hpByG) {
+  let maxG = null;
+  for (const [gStr, hp] of Object.entries(hpByG)) {
+    const g = Number(gStr);
+    const dmg = realDamage(s, { ...mode, stageG: g });
+    if (dmg >= hp) {
+      if (maxG === null || g > maxG) maxG = g;
+    }
+  }
+  return maxG;
+}
+
 // ── perLevel 캘리브레이션 ─────────────────────────────────────
 // before/after 두 스탯과 인게임에서 실측한 "실데미지 변화율"(observedRatio,
 // 예: -0.05)을 주면 스킬 레벨당 % 계수(perLevel)를 역산한다.
