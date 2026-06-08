@@ -2,7 +2,7 @@
 // 검증 케이스 출처: _progress/데이터.md §1.2 §6, _progress/스탯-측정.md (2026-06-04)
 
 import { realDamage, totalAttack, compareDamage, calibratePerLevel, statRatioFromMainStat,
-         clearTime, huntRate, compareHuntSpeed, overkillThresholdG } from "./realDamage.mjs";
+         clearTime, huntRate, compareHuntSpeed, overkillThresholdG, normalMobDefenseRate } from "./realDamage.mjs";
 import { BASELINE } from "./baseline.mjs";
 
 let pass = 0;
@@ -143,6 +143,39 @@ const MODE_NORMAL = { boss: false, skill: true };
 // ── 내부 헬퍼: BASELINE에 델타 적용 (테스트용 래퍼) ────────────
 function applyDeltaHelper(base, delta) {
   return { ...base, ...delta };
+}
+
+// ── 골든값 회귀 케이스 (2026-06-08 성장후 실측 확정) ───────────
+
+// 14) 일반몹 방어곡선 — 16-5(g=165) 성장후 실측 30.16%
+//     2차 모델(quad, 기본): -2.591e-4×165²+0.2358×165-1.691 = 30.162%
+approx(normalMobDefenseRate(165), 0.3016, 0.002,
+  "16-5(g165) 방어율 30.16% = 성장후 실측");
+
+// 15) 일반몹 방어곡선 — 2-1(g=11) 2차 모델
+//     -2.591e-4×11²+0.2358×11-1.691 = 0.8714% ≈ 0.87%
+approx(normalMobDefenseRate(11), 0.0087, 0.005,
+  "2-1(g11) 방어율 ≈ 0.87% (2차모델)");
+
+// 16) 방어 비율 골든 — 성장후 16-5÷2-1 = 0.6984 재현
+//     (1 - normalMobDefenseRate(165)) ≈ 0.6984
+approx(1 - normalMobDefenseRate(165), 0.6984, 0.003,
+  "성장후 16-5÷2-1 = 0.6984 재현");
+
+// 17) 크리 평균배율 — 크확 66.2 × 크뎀 101.4 기준
+//     공식: crit = 1 + (critRate/100)×(critDmg/100) = 1 + 0.662×1.014 = 1.6713
+//     realDamage 비율로 검증: (critRate=BASELINE vs critRate=0)
+//
+//     단일 크리타격 배율: ×(1+critDmg/100) = ×(1+101.4/100) = ×2.014 (성장후 cr/nc=2.014 실측)
+//     ⚠ 단일 크리배율(2.014)과 평균 크리배율(1.6713)의 차이:
+//       평균 = 1 + critRate×단일크리증가분 = 1 + 0.662×1.014
+{
+  // BASELINE: critRate=66.2, critDmg=101.4
+  const withCrit = realDamage(BASELINE, { boss: false, skill: false });
+  const noCrit   = realDamage({ ...BASELINE, critRate: 0 }, { boss: false, skill: false });
+  // 이론값: 1 + 0.662 × 1.014 = 1.671268
+  approx(withCrit / noCrit, 1 + 0.662 * 1.014, 1e-6,
+    "크리 평균배율 1.6713 (크확66.2×크뎀101.4), 성장후 cr/nc=2.014 실측");
 }
 
 // ── 결과 ──────────────────────────────────────────────────────
